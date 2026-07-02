@@ -100,7 +100,13 @@ def main():
     # 推送简报到微信等渠道（需配置环境变量）
     print("\n📤 推送简报...")
     today_str = date.today().isoformat()
-    push.send_brief(content, title=f"秋招雷达日报 {today_str}")
+    if full_mode:
+        push_title = f"秋招雷达 {today_str} ｜ 初始化"
+    elif total_new > 0:
+        push_title = f"🆕 秋招雷达 {today_str} ｜ {total_new}个新岗位!"
+    else:
+        push_title = f"秋招雷达 {today_str} ｜ 无新增"
+    push.send_brief(content, title=push_title)
     return content
 
 

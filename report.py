@@ -23,6 +23,23 @@ def _match_keywords(job: JobItem) -> bool:
     return any(kw in text for kw in all_kw)
 
 
+def _enrich_category(job: JobItem) -> JobItem:
+    """如果 category 不含关注方向关键词，用 guess_category 补充"""
+    from scrapers.base import guess_category
+    # 检查现有 category 是否已包含关注方向
+    has_focus = any(kw in job.category for kw in config.CATEGORY_KEYWORDS)
+    if not has_focus:
+        guessed = guess_category(job.title)
+        # 只保留关注方向的类别（产品/运营/电商），不追加技术等
+        focus_cats = [c for c in guessed.split("、") if c in config.KEYWORDS.keys()]
+        if focus_cats:
+            existing = [c for c in job.category.split("、") if c] if job.category else []
+            # 合并去重
+            merged = list(dict.fromkeys(focus_cats + existing))
+            job.category = "、".join(merged)
+    return job
+
+
 def _match_city(job: JobItem) -> bool:
     """判断岗位是否在目标城市（空配置=不限）"""
     if not config.TARGET_CITIES:
@@ -36,7 +53,12 @@ def _match_city(job: JobItem) -> bool:
 
 def filter_jobs(jobs: List[JobItem]) -> List[JobItem]:
     """按关键词+城市过滤岗位"""
-    return [j for j in jobs if _match_keywords(j) and _match_city(j)]
+    result = []
+    for j in jobs:
+        _enrich_category(j)
+        if _match_keywords(j) and _match_city(j):
+            result.append(j)
+    return result
 
 
 def generate_brief(jobs: List[JobItem], new_keys: set, all_raw_count: dict) -> str:
@@ -56,15 +78,25 @@ def generate_brief(jobs: List[JobItem], new_keys: set, all_raw_count: dict) -> s
     lines = []
     lines.append(f"# 📋 秋招雷达日报 · {today}")
     lines.append("")
-    lines.append(f"> 自动抓取于 {now} ｜ 关注方向：产品 / 运营 ｜ 目标城市：{('、'.join(config.TARGET_CITIES)) or '全国'}")
+    lines.append(f"> 自动抓取于 {now} ｜ 关注方向：电商 / 产品 / 运营 ｜ 目标城市：{('、'.join(config.TARGET_CITIES)) or '全国'}")
     lines.append("")
+
+    # 公司排序：官网优先，offerstar 最后
+    company_order = ["京东", "快手", "小红书", "拼多多", "淘宝", "offerstar"]
+    def _sort_key(name):
+        if name in company_order:
+            return (0, company_order.index(name))
+        return (1, name)  # 未知公司排在最后
+
+    sorted_companies = sorted(all_raw_count.keys(), key=_sort_key)
 
     # 总览
     lines.append("## 📊 今日总览")
     lines.append("")
-    lines.append("| 公司 | 抓取岗位总数 | 命中产品/运营 | 今日新增 |")
-    lines.append("|------|------------|-------------|---------|")
-    for company, cnt in all_raw_count.items():
+    lines.append("| 公司 | 抓取岗位总数 | 命中方向 | 今日新增 |")
+    lines.append("|------|------------|---------|---------|")
+    for company in sorted_companies:
+        cnt = all_raw_count[company]
         hit = len([j for j in target_jobs if j.company == company])
         new = len([j for j in new_jobs if j.company == company])
         lines.append(f"| {company} | {cnt} | {hit} | {new if new else '-'} |")
@@ -82,7 +114,7 @@ def generate_brief(jobs: List[JobItem], new_keys: set, all_raw_count: dict) -> s
         by_company = {}
         for j in new_jobs:
             by_company.setdefault(j.company, []).append(j)
-        for company in sorted(by_company.keys()):
+        for company in sorted(by_company.keys(), key=_sort_key):
             lines.append(f"### {company}")
             lines.append("")
             lines.append("| 岗位名称 | 类别 | 地点 | 发布时间 | 标签 | 链接 |")
@@ -97,19 +129,19 @@ def generate_brief(jobs: List[JobItem], new_keys: set, all_raw_count: dict) -> s
     else:
         lines.append("## 🆕 今日新增岗位")
         lines.append("")
-        lines.append("今日暂无新增的目标岗位。各公司官网一旦放出新的产品/运营岗，次日简报会自动列出。")
+        lines.append("今日暂无新增的目标岗位。各公司官网一旦放出新的电商/产品/运营岗，次日简报会自动列出。")
         lines.append("")
 
     # 在招岗位存量（命中的，便于随时查阅）
     if existing_jobs:
-        lines.append("## 📌 当前在招（产品/运营方向）")
+        lines.append("## 📌 当前在招（电商/产品/运营方向）")
         lines.append("")
         lines.append("<details><summary>点击展开全部在招岗位</summary>")
         lines.append("")
         by_company = {}
         for j in existing_jobs:
             by_company.setdefault(j.company, []).append(j)
-        for company in sorted(by_company.keys()):
+        for company in sorted(by_company.keys(), key=_sort_key):
             lines.append(f"**{company}**")
             lines.append("")
             for j in by_company[company]:

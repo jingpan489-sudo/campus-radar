@@ -18,15 +18,21 @@ def send_brief(content: str, title: str = "秋招雷达日报"):
     push_key = os.environ.get("PUSH_KEY", "").strip()
     if push_key:
         try:
-            # 简报内容截断（Server酱正文上限约 32KB）
+            # Server酱正文上限约 32KB
             body = content[:30000]
             r = requests.post(
                 f"https://sctapi.ftqq.com/{push_key}.send",
                 data={"title": title, "desp": body},
-                timeout=15,
+                timeout=20,
             )
-            ok = r.json().get("code") == 0
-            results.append(f"Server酱: {'成功' if ok else '失败 ' + r.text[:100]}")
+            resp = r.json()
+            code = resp.get("code")
+            data = resp.get("data", {})
+            error = data.get("error", "")
+            if code == 0 and error == "SUCCESS":
+                results.append(f"Server酱: 成功 (pushid={data.get('pushid')})")
+            else:
+                results.append(f"Server酱: 接口返回非成功 code={code} error={error} resp={r.text[:200]}")
         except Exception as e:
             results.append(f"Server酱: 异常 {e}")
 
