@@ -70,6 +70,11 @@ def generate_brief(jobs: List[JobItem], new_keys: set, all_raw_count: dict) -> s
         lines.append(f"| {company} | {cnt} | {hit} | {new if new else '-'} |")
     lines.append("")
 
+    # 投递进度概览
+    app_section = _build_application_section()
+    if app_section:
+        lines.extend(app_section)
+
     # 新增岗位
     if new_jobs:
         lines.append("## 🆕 今日新增岗位")
@@ -126,3 +131,69 @@ def generate_brief(jobs: List[JobItem], new_keys: set, all_raw_count: dict) -> s
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(content)
     return content
+
+
+def _build_application_section():
+    """构建投递进度概览（插入每日简报里）"""
+    try:
+        import sqlite3
+        conn = sqlite3.connect(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "jobs.db"))
+        rows = conn.execute("""
+            SELECT company, position, status, apply_date, feedback, next_step
+            FROM applications ORDER BY update_time DESC
+        """).fetchall()
+        conn.close()
+    except Exception:
+        return None
+    if not rows:
+        return None
+
+    total = len(rows)
+    # 按状态分组
+    by_status = {}
+    for r in rows:
+        by_status.setdefault(r[2] or "未知", []).append(r)
+    # 进展中的（非终态）
+    in_progress = [r for r in rows if r[2] in ("笔试", "一面", "二面", "三面", "HR面")]
+    offers = [r for r in rows if r[2] == "Offer"]
+    rejected = [r for r in rows if r[2] in ("已拒", "已放弃")]
+
+    lines = []
+    lines.append("## 📬 我的投递进度")
+    lines.append("")
+    lines.append(f"> 共投递 **{total}** 个岗位 ｜ 进行中 **{len(in_progress)}** ｜ Offer **{len(offers)}** ｜ 已结束 **{len(rejected)}**")
+    lines.append("")
+
+    # 状态分布条
+    status_order = ["待投递", "已投递", "笔试", "一面", "二面", "三面", "HR面", "Offer", "已拒", "已放弃"]
+    parts = []
+    for s in status_order:
+        if s in by_status:
+            parts.append(f"`{s}: {len(by_status[s])}`")
+    if parts:
+        lines.append("  ".join(parts))
+        lines.append("")
+
+    # 近期需要关注的（有下一步动作 或 进行中）
+    focus = [r for r in rows if r[2] in ("笔试", "一面", "二面", "三面", "HR面") or r[5]]
+    if focus:
+        lines.append("<details><summary>📍 需关注（进行中 / 有待办）</summary>")
+        lines.append("")
+        lines.append("| 公司 | 岗位 | 状态 | 投递日期 | 反馈 | 下一步 |")
+        lines.append("|------|------|------|---------|------|--------|")
+        for r in focus[:15]:
+            lines.append(f"| {r[0]} | {r[1]} | {r[2]} | {r[3] or '-'} | {r[4] or '-'} | {r[5] or '-'} |")
+        lines.append("")
+        lines.append("</details>")
+        lines.append("")
+
+    # Offer 列表（如果有）
+    if offers:
+        lines.append("### 🎉 已获 Offer")
+        lines.append("")
+        for r in offers:
+            lines.append(f"- **{r[0]}** - {r[1]} （{r[3]}）")
+        lines.append("")
+
+    return lines

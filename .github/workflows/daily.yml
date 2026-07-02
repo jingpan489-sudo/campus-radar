@@ -39,6 +39,11 @@ jobs:
             python main.py --full
           fi
 
+      - name: 导出投递追踪表
+        if: always()
+        run: |
+          python tracker.py export || true
+
       - name: 写入 Actions 运行摘要
         if: always()
         run: |
