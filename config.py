@@ -88,25 +88,80 @@ COMPANY_CONFIG = {
 #
 # 示例（取消注释并修改即可启用）：
 #
-# GENERIC_SOURCES = [
-#     {
-#         "name": "某公司",
-#         "type": "api",                          # api 或 html
-#         "url": "https://example.com/api/jobs",
-#         "method": "POST",
-#         "headers": {"Content-Type": "application/json"},
-#         "body_template": {"page": "{page}", "size": 100},
-#         "pagination": {"page_start": 1, "page_key": "page", "stop_when": "less_than_size"},
-#         "response": {"list_path": "data.list", "total_path": "data.total"},
-#         "fields": {
-#             "job_id": "id", "title": "positionName", "category": "jobType",
-#             "location": "workCity", "publish_time": "createTime",
-#         },
-#         "detail_url_template": "https://example.com/jobs/{job_id}",
-#         "timestamp_field": "createTime",
-#     },
-# ]
-GENERIC_SOURCES = []
+GENERIC_SOURCES = [
+{
+    "name": "智联招聘-校招",
+    "type": "api",
+    "url": "https://fe-api.zhaopin.com/c/i/sou",
+    "method": "GET",
+    # 请求参数，{page} 会被替换为页码
+    "params": {
+        "pageSize": 90,              # 每页条数，最大90[citation:2]
+        "cityId": 489,              # 城市代码，需通过其他接口获取[citation:14]
+        "workExperience": -1,       # -1表示不限
+        "education": -1,            # -1表示不限
+        "companyType": -1,          # -1表示不限，国有企业可筛选
+        "employmentType": 2,        # 2可能对应校招/实习，需测试
+        "jobWelfareTag": -1,
+        "kw": "景观设计",            # 关键词，可替换为"文旅"等
+        "kt": 3,
+        "page": "{page}"            # 页码占位符
+    },
+    "pagination": {
+        "page_start": 1,
+        "page_key": "page",
+        "stop_when": "less_than_size"  # 返回条数小于pageSize时停止
+    },
+    "response": {
+        "list_path": "data.results",   # 岗位列表路径[citation:14]
+        "total_path": "data.count"     # 总数字段（需测试）
+    },
+    "fields": {
+        "title": "jobName",            # 岗位名称[citation:14]
+        "category": "jobType",         # 职位类别
+        "location": "city",            # 工作城市
+        "url": "positionURL",          # 详情页链接
+        "publish_time": "createDate",  # 发布日期
+        "salary": "salary",            # 薪资[citation:14]
+        "education": "eduLevel.name",  # 学历要求[citation:14]
+        "experience": "workingExp.name" # 经验要求[citation:14]
+    },
+    "detail_url_template": "https://jobs.zhaopin.com/{job_id}",
+    "timestamp_field": "createDate"
+},
+]
+GENERIC_SOURCES = [
+{
+    "name": "字节跳动-校园招聘",
+    "type": "html",  # 因无公开API，需解析HTML页面
+    "url": "https://jobs.bytedance.com/campus/position",
+    "method": "GET",
+    "params": {
+        "current": 1,           # 页码
+        "limit": 10,            # 每页条数
+        "type": 2,              # 2可能对应校园招聘
+        "keywords": ""          # 可填入"文旅"、"景观"等关键词筛选
+    },
+    "pagination": {
+        "page_start": 1,
+        "page_key": "current",
+        "stop_when": "less_than_size"
+    },
+    "response": {
+        # 需查看页面HTML结构，确定岗位列表的CSS选择器或XPath
+        "list_selector": ".position-list .job-card",  # 示例，需实测
+    },
+    "fields": {
+        "title": ".job-title",      # 岗位名称
+        "category": ".job-category", # 职位类别
+        "location": ".job-location", # 工作城市
+        "url": ".job-link",          # 详情页链接
+        "publish_time": ".publish-time"  # 发布时间
+    },
+    # 页面中明确标注了2026届和2027届岗位[citation:1][citation:4][citation:6]
+    "detail_url_template": "https://jobs.bytedance.com/campus/position/{job_id}"
+}    
+]
 
 # ==================== 运行参数 ====================
 # 请求超时（秒）
